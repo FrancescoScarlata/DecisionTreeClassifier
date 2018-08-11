@@ -6,7 +6,8 @@ We want to do a CART classifier, but in the end i'd like to do a iterative algor
 '''
 from DecisionNode import DecisionNode
 from Leaf import Leaf
-from Question import Question 
+from Question import Question
+from Node import Node
 # toy training data set. This will be deleted when the algoritm works and i've downloaded the right datasets.
 
 # Format: each row is an example.
@@ -17,6 +18,8 @@ training_data = [
     ['Red', 1, 'Grape'],
     ['Red', 1, 'Grape'],
     ['Yellow', 3, 'Lemon'],
+	['Yellow', 4, 'Lemon'],
+	['Yellow', 2, 'Lemon'],
 ]
 
 # Column labels.
@@ -93,40 +96,158 @@ def info_gain(left, right, current_uncertainty):
 	
 	
 def find_best_split(rows,header):
-    """
+	"""
 	Find the best question to ask by iterating over every feature / value
-    and calculating the information gain."""
-    best_gain = 0  # keep track of the best information gain
-    best_question = None  # keep train of the feature / value that produced it
-    current_uncertainty = gini(rows)
-    n_features = len(rows[0]) - 1  # number of columns
+	and calculating the information gain."""
+	best_gain = 0  # keep track of the best information gain
+	best_question = None  # keep train of the feature / value that produced it
+	current_uncertainty = gini(rows)
+	n_features = len(rows[0]) - 1  # number of columns
 
-    for col in range(n_features):  # for each feature
+	for col in range(n_features):  # for each feature
 
-        values = unique_vals(rows,col)  # unique values in the column
+		values = unique_vals(rows,col)  # unique values in the column
 
-        for val in values:  # for each value
+		for val in values:  # for each value
 
-            question = Question(col, val,header)
-
+			question = Question(col, val,header)
             # try splitting the dataset
-            true_rows, false_rows = partition(rows, question)
+			true_rows, false_rows = partition(rows, question)
 
             # Skip this split if it doesn't divide the
             # dataset.
-            if len(true_rows) == 0 or len(false_rows) == 0:
-                continue
+			if len(true_rows) == 0 or len(false_rows) == 0:
+				continue
 
             # Calculate the information gain from this split
-            gain = info_gain(true_rows, false_rows, current_uncertainty)
+			gain = info_gain(true_rows, false_rows, current_uncertainty)
 
             # You actually can use '>' instead of '>=' here
             # but I wanted the tree to look a certain way for our
             # toy dataset.
-            if gain >= best_gain:
-                best_gain, best_question = gain, question
+			if gain >= best_gain:
+				best_gain, best_question = gain, question
+				print("\n best question:" +str(best_question))
+	return best_gain, best_question
 
-    return best_gain, best_question
+
+def iterative_build_tree(rows, maxNodes):
+	"""
+		Builds the tree in an iterative way.
+		It will start with 1 node at the start and has to learn with at max the number of nodes decided.
+	
+    """
+	currentNodes=1 #the first node is the root.
+	
+	gain,question=find_best_split(rows,header)
+	
+	# Since we can ask no further questions,
+    # we'll return a leaf.
+	if gain== 0	:
+		return Leaf(rows)	
+	else :				# now starts the real problem
+		root=Node(question, gain, rows, None,None)	#The root is a node now
+		
+		true_rows, false_rows= partition(root.rows, root.question)
+		
+		gainT,questionT = find_best_split(true_rows,header)	#finds the best gini for both the false and the true
+		gainF,questionF = find_best_split(false_rows,header)
+		
+		true_branch=None
+		false_branch=None
+		nodes_to_split= list()
+		
+		root= DecisionNode(question,None, None)
+		
+		if(gainT==0):		# Check if the gain is 0... in that case that's a leaf
+			true_branch=Leaf(true_rows)
+		else:
+			true_branch=Node(questionT,gainT,true_rows, root, True)
+			nodes_to_split.append(true_branch)
+			
+		root.true_branch=true_branch
+		if(gainF==0):		# Check if the gain is 0... in that case that's a leaf
+			false_branch=Leaf(false_rows)
+		else:
+			false_branch=Node(questionF,gainF,false_rows,root, False)
+			nodes_to_split.append(false_branch)
+			
+		root.false_branch=false_branch
+		
+		currentNodes+=1
+
+		#the number of nodes are not the max means that i can still partitionate if there are nodes that allows that
+		#if the nodes to split are==0 means that there are not nodes to partitionate
+		while(currentNodes<maxNodes and (not len(nodes_to_split)==0)): 
+			# find the best gain from all the nodes. should be sorted?
+			max=0
+			bestNodeIndex=0
+			for i in range(0,len(nodes_to_split)):
+				
+				if(nodes_to_split[i].gain>max):
+					max=nodes_to_split[i].gain
+					bestNodeIndex=i
+			
+			#Now that we have the node with the best gain, we should partition as we did with the root
+			i=bestNodeIndex
+
+			true_rows, false_rows= partition(nodes_to_split[i].rows, nodes_to_split[i].question)
+			gainT,questionT=find_best_split(true_rows,header)	#finds the best gini for both the false and the true
+			gainF,questionF=find_best_split(false_rows,header)
+						
+			if(nodes_to_split[i].isATrueChild):	#the node has to stay on the true_branch
+				
+				nodes_to_split[i].father.true_branch=DecisionNode(nodes_to_split[i].question,None,None)
+				if(gainT==0):
+					nodes_to_split[i].father.true_branch.true_branch=Leaf(true_rows)
+				else:
+					true_branch=Node(questionT,gainT,true_rows, nodes_to_split[i].father.true_branch, True)
+					nodes_to_split[i].father.true_branch.true_branch=true_branch
+					nodes_to_split.append(true_branch)
+				
+				if(gainF==0):
+					nodes_to_split[i].father.true_branch.false_branch=Leaf(false_rows)
+				else:
+					false_branch=Node(questionF,gainF,false_rows, nodes_to_split[i].father.true_branch, False)
+					nodes_to_split[i].father.true_branch.false_branch=false_branch
+					nodes_to_split.append(false_branch)
+						
+			else:	#the node has to stay on the false_branch of the father
+				nodes_to_split[i].father.false_branch=DecisionNode(nodes_to_split[i].question,None,None)
+				if(gainT==0):
+					nodes_to_split[i].father.false_branch.true_branch=Leaf(true_rows)
+				else:
+					true_branch=Node(questionT,gainT,true_rows, nodes_to_split[i].father.false_branch, True)
+					nodes_to_split[i].father.false_branch.true_branch=true_branch
+					nodes_to_split.append(true_branch)
+				
+				if(gainF==0):
+					nodes_to_split[i].father.false_branch.false_branch=Leaf(false_rows)
+				else:
+					false_branch=Node(questionF,gainF,false_rows, nodes_to_split[i].father.false_branch, False)
+					nodes_to_split[i].father.false_branch.false_branch=false_branch
+					nodes_to_split.append(false_branch)
+			
+			del nodes_to_split[i]	#delete the now decision Node from the list of Nodes to split
+			currentNodes+=2
+		
+		''' 
+		Now there are 2 cases:
+		1) the max number of nodes is reached. 
+			This mean that if there are other Nodes in the list, those have to become a leaf.
+		2) the length of the node list is 0, this means that there are no other question to ask
+		
+		We can check those cases with the len of the node list
+		'''
+		if(len(nodes_to_split)>0):
+			for node in nodes_to_split:
+				if(node.isATrueChild==True):
+					node.father.true_branch=Leaf(node.rows)
+				else:
+					node.father.false_branch=Leaf(node.rows)
+		
+		print("Number of total node (inner included):"+ str(currentNodes))
+		return root
 
 	
 def build_tree(rows):
@@ -168,23 +289,26 @@ def build_tree(rows):
     return DecisionNode(question, true_branch, false_branch)
 	
 def print_tree(node, spacing=""):
-    """World's most elegant tree printing function."""
+	"""World's most elegant tree printing function."""
 
-    # Base case: we've reached a leaf
-    if isinstance(node, Leaf):
-        print (spacing + "Predict", node.predictions)
-        return
+	# Base case: we've reached a leaf
+	if isinstance(node, Leaf):
+		print (spacing + "Records:")
+		for row in node.rows:
+			print (spacing,row)
+		print (spacing + "Predicts", node.predictions)
+		return
 
-    # Print the question at this node
-    print (spacing + str(node.question))
+	# Print the question at this node
+	print (spacing + str(node.question))
 
-    # Call this function recursively on the true branch
-    print (spacing + '--> True:')
-    print_tree(node.true_branch, spacing + "  ")
+	# Call this function recursively on the true branch
+	print (spacing + '--> True:')
+	print_tree(node.true_branch, spacing + "  ")
 
-    # Call this function recursively on the false branch
-    print (spacing + '--> False:')
-    print_tree(node.false_branch, spacing + "  ")
+	# Call this function recursively on the false branch
+	print (spacing + '--> False:')
+	print_tree(node.false_branch, spacing + "  ")
 	
 	
 def classify(row, node):
@@ -204,7 +328,15 @@ def classify(row, node):
 		
 		
 		
-		
+# to try the predictor	
 my_tree = build_tree(training_data)
 
+print("old tree: \n")
 print_tree(my_tree)
+
+print("\n \n \n new tree calculation: \n")
+
+my_new_tree=iterative_build_tree(training_data,6)
+
+print("\nnew tree: \n")
+print_tree(my_new_tree)

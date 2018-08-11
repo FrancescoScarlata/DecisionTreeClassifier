@@ -10,7 +10,7 @@ class Leaf:
 	"""
 
 	def __init__(self, rows):
-		self.predictions = self.class_counts(rows)
+		self.predictions = self.majority_of_labels(self.class_counts(rows))
 		self.rows=rows
 		
 	def class_counts(self, rows):
@@ -26,3 +26,13 @@ class Leaf:
 				counts[label] = 0
 			counts[label] += 1
 		return counts
+		
+		
+	def majority_of_labels(self, counts):
+		labels=list(counts.keys())
+		max_label=0
+		for i in range(0,len(labels)):
+			if(counts[labels[i]]>counts[labels[max_label]]):
+				max_label=i
+				
+		return labels[max_label]
