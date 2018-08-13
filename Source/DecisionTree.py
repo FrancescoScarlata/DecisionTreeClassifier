@@ -1,17 +1,22 @@
 '''
 At first i'm taking the script from the https://www.youtube.com/watch?v=LDRbO9a6XPU tutorial about the decision tree.
-
 We want to do a CART classifier, but in the end i'd like to do a iterative algorithm instead of a recursive one. We'll see.
-
 '''
 from DecisionNode import DecisionNode
 from Leaf import Leaf
 from Question import Question
 from Node import Node
-# toy training data set. This will be deleted when the algoritm works and i've downloaded the right datasets.
+from CsvReader import CsvReader
+import numpy as np
+import math
+from pathlib import Path
+import os.path
 
+'''
+# toy training data set. This will be deleted when the algoritm works and i've downloaded the right datasets.
 # Format: each row is an example.
 # The last column is the label.
+
 training_data = [
     ['Green', 3, 'Apple'],
     ['Yellow', 3, 'Apple'],
@@ -25,6 +30,101 @@ training_data = [
 # Column labels.
 # These are used only to print the tree.
 header = ["color", "diameter", "label"]
+'''
+
+# ------ New Functions ----
+
+def readDataset():
+	'''
+		This makes the input calls to have the paths to the dataset and the header.
+		It will return the CvsReader Class with the dataset and the header.
+	'''
+	parentPath=str(Path(__file__).resolve().parents[1])
+
+	filename_data=input("Please write the relative path of you dataset file (i.e. \"Car/data.csv\"): ")
+	filename_data=os.path.join(parentPath,"Datasets",filename_data)
+
+	filename_header=input("Please write the relative path of you dataset file (i.e. \"Car/header.csv\"): ")
+	filename_header=os.path.join(parentPath,"Datasets",filename_header)
+
+	numericIndex=input("Insert the indexes of the columns that are numerics, if any. Divide the index with a ,(comma): ")
+
+	numericIndex=numericIndex.split(",")
+	#print ("Empty: "+str(numericIndex))
+	if(len(numericIndex)>0 and not numericIndex[0]==''):
+		numericIndex=[int(i) for i in numericIndex]
+		print (numericIndex)
+		#print("len of num: "+str(len(numericIndex)))
+	else:
+		numericIndex=None
+
+	dataset=CsvReader(filename_data,filename_header,numericIndex)
+	return dataset
+
+
+def divideInHalfTheDataset(dataset):
+	'''
+		This method will divide the dataset in 2: test set and training set.
+		It will return the training set and the test set.
+	'''
+	training_set=list()
+	test_set=list()
+	for i in range (0, len(dataset)):
+		if(i%2==0):
+			training_set.append(dataset[i])
+		else:
+			test_set.append(dataset[i])
+	
+	return training_set, test_set
+	
+	
+def createThesubsets(training, number_of_block):
+	'''
+		This will create the subsets dividing the training set.
+		The training are the rows of the training set
+		The number of block is the number of block in which divide the training set.
+		If the number is higher of the number of cardinality of the training set, it will choose the len(training)
+		if the number is lower of len(training) there are 2 case:
+			a) the number divides in equal blocks
+			b) the number doesn't divide in equal blocks. In this case we'll find a lower number that divides equally the set.
+	'''
+	if(number_of_block>len(training)):	#if it is higher. it becomes equal to the number of elements.
+		number_of_block=len(training)
+	else:
+		value=len(training)%number_of_block
+		print("len of the training data: "+ str(len(training)))
+		print("starting number of block: "+str(number_of_block))
+		print("module: "+str(value))
+		
+		while(not value==0):	#if the number doesn't divide equally, lower it.
+			number_of_block-=value
+			value=len(training)%number_of_block
+			print("number of block: "+str(number_of_block))
+			print("module: "+str(value))
+			
+	print("creating the validation set with "+str(number_of_block)+" sets")
+	
+	blocksize=int(len(training)/number_of_block)
+	sets = [training[x:x+blocksize] for x in range(0, len(training), blocksize)]
+	#print (sets)
+	return sets
+
+def lossFunction(set, tree):
+	'''
+		This function will take the set of example, will classify them and if the label is wrong, it will add a +1 to the sum
+		It will return the amount of errors
+	'''
+	loss=0
+	for row in set:
+		measure=classify(row,tree)
+		if(not measure==row[-1]):
+			loss+=1
+			#print("the prediction: "+str(measure)+" ; the correct label: "+ str(row[-1]))
+
+	return loss
+
+
+# --- Old Functions (except the iterative tree building) ---	
 
 
 def unique_vals(rows, col):
@@ -127,7 +227,6 @@ def find_best_split(rows,header):
             # toy dataset.
 			if gain >= best_gain:
 				best_gain, best_question = gain, question
-				print("\n best question:" +str(best_question))
 	return best_gain, best_question
 
 
@@ -174,7 +273,7 @@ def iterative_build_tree(rows, maxNodes):
 			
 		root.false_branch=false_branch
 		
-		currentNodes+=1
+		currentNodes+=2
 
 		#the number of nodes are not the max means that i can still partitionate if there are nodes that allows that
 		#if the nodes to split are==0 means that there are not nodes to partitionate
@@ -251,14 +350,14 @@ def iterative_build_tree(rows, maxNodes):
 
 	
 def build_tree(rows):
-    """Builds the tree.
+    """
+	The tutorial tree
+	Builds the tree.
 
     Rules of recursion: 1) Believe that it works. 2) Start by checking
     for the base case (no further information gain). 3) Prepare for
     giant stack traces.
-	
-	
-	TO DO: this has to change and become a iterative method.
+
     """
 
     # Try partitioing the dataset on each of the unique attribute,
@@ -294,8 +393,8 @@ def print_tree(node, spacing=""):
 	# Base case: we've reached a leaf
 	if isinstance(node, Leaf):
 		print (spacing + "Records:")
-		for row in node.rows:
-			print (spacing,row)
+		#for row in node.rows:
+			#print (spacing,row)
 		print (spacing + "Predicts", node.predictions)
 		return
 
@@ -326,17 +425,31 @@ def classify(row, node):
     else:
         return classify(row, node.false_branch)
 		
+	
+dataset=readDataset()	
 		
-		
-# to try the predictor	
-my_tree = build_tree(training_data)
+training_data,test_data=divideInHalfTheDataset(dataset.data)
+header=dataset.header
 
-print("old tree: \n")
-print_tree(my_tree)
+# The tutorial tree predictor	
+#my_tree = build_tree(training_data)
+#print("old tree: \n")
+#print_tree(my_tree)
+print("Nodes(N)=(2^(d-1)) <<(2^(d)): "+str(int(	2**(len(training_data[0])-1)	)))
+number_of_nodes=int(2**(len(training_data[0])-1))
+print("classificators= (2de)^N : "+str(int(	2**(len(training_data[0])-1)	)))
+number_of_classificators=int((2*len(training_data[0])*math.e)**number_of_nodes)
+sets=createThesubsets(training_data,number_of_classificators)
 
-print("\n \n \n new tree calculation: \n")
+print("\n\n\ntree calculation:\n")
 
-my_new_tree=iterative_build_tree(training_data,6)
+print("len: "+str(len(training_data[0])))
+
+my_new_tree=iterative_build_tree(training_data,number_of_nodes)
 
 print("\nnew tree: \n")
 print_tree(my_new_tree)
+
+print("\n\n\nvaluating the loss:")
+print("loss is: "+str(lossFunction(test_data,my_new_tree)))
+print("\n")
