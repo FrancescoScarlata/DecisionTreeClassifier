@@ -9,6 +9,7 @@ from Node import Node
 from CsvReader import CsvReader
 import numpy as np
 import math
+import time
 from pathlib import Path
 import os.path
 
@@ -92,7 +93,6 @@ def createThesubsets(training, number_of_block):
 		number_of_block=len(training)
 	else:
 		value=len(training)%number_of_block
-		print("len of the training data: "+ str(len(training)))
 		print("starting number of block: "+str(number_of_block))
 		print("module: "+str(value))
 		
@@ -101,12 +101,14 @@ def createThesubsets(training, number_of_block):
 			value=len(training)%number_of_block
 			print("number of block: "+str(number_of_block))
 			print("module: "+str(value))
-			
-	print("creating the validation set with "+str(number_of_block)+" sets")
-	
+		
+		if(number_of_block==1):
+			number_of_block=len(10)
+	print("Creating the validation set with "+str(number_of_block)+" subsets")
 	blocksize=int(len(training)/number_of_block)
 	sets = [training[x:x+blocksize] for x in range(0, len(training), blocksize)]
-	#print (sets)
+	#for set in sets:
+	#	print (set)
 	return sets
 
 def lossFunction(set, tree):
@@ -121,11 +123,68 @@ def lossFunction(set, tree):
 			loss+=1
 			#print("the prediction: "+str(measure)+" ; the correct label: "+ str(row[-1]))
 
+	#print ("The loss is: "+str(loss))
+	print ('.' , end='', flush=True)
 	return loss
 
 
+def external_cross_validation(sets, number_of_nodes, size_ts):
+	'''
+		This is method will determine the mean estimation of goodness of the parameter of nodes in this dataset.
+		This will return the mean error on the validations subsets.
+	'''
+	print("[External CV]\nNumber of sets: "+str(len(sets))+", number of nodes: "+str(number_of_nodes)+", size of the training set: "+str(size_ts))
+	errors=list()
+	training_set=list()
+	
+	#loop to make len(sets) trees and determine trees and the losses of each validation set.
+	for i in range(0, len(sets)):
+		for j in range(0,len(sets)):
+			if(not i==j):
+				training_set+=sets[j]
+		#create the tree with N-1 blocks
+		tree=iterative_build_tree(training_set,number_of_nodes)
+		#determine the error function on the 1 block call validation set
+		errors.append(len(sets)/size_ts*lossFunction(sets[i],tree))
+	
+	error=np.mean(errors)
+	print ("\n[External CV]\nThe Mean error is: "+ str(error)+" with the number of nodes: "+ str(number_of_nodes))
+	return error
+	
 # --- Old Functions (except the iterative tree building) ---	
 
+def internal_cross_validation(sets,starting_num_of_nodes, ending_num_of_nodes, different_nodes_values, size_ts):
+	'''
+		This method will search the best value of the number of nodes between the starting number of nodes and the ending number of nodes.
+		The input are the subsets made, 2 effective number of nodes. 
+		The starting is the left border of the interval, the ending is the right border.
+		The different_nodes_values is the number of elements that the internal cross validation should confront. 
+			1 means it will check just one values. +2 means different values
+		It will return the correct number of nodes given those number of nodes.
+	'''
+	print("[INTERNAL CV]\nCalculating between "+str(starting_num_of_nodes)+" to "+str(ending_num_of_nodes)+"=(2^(d+1)) with "+str(different_nodes_values)+" different values in this interval")
+	if(starting_num_of_nodes>ending_num_of_nodes):
+		print("Error: starting should be lower of the ending one")
+	
+	if(different_nodes_values<=0):
+		print("Error: the different_nodes_values should be >0 (maybe at least 2)")
+	
+	nodes_to_test=np.linspace(starting_num_of_nodes, ending_num_of_nodes, different_nodes_values)
+	
+	index_error_list=list()
+	
+	for i in range(0, len(nodes_to_test)):
+		index_error_list.append([int(nodes_to_test[i]),external_cross_validation(sets,int(nodes_to_test[i]),size_ts)])
+	
+	# all the errors are calculated. we need to find the argmin
+	min_index=0
+	for i in range(0,len(index_error_list)):
+		if(index_error_list[min_index][1]>index_error_list[i][1]):
+			min_index=i
+	
+	print("[INTERNAL CV result] The number of nodes should be: "+str(index_error_list[min_index][0]))
+	return index_error_list[min_index][0]	
+	
 
 def unique_vals(rows, col):
     """Find the unique values for a column in a dataset."""
@@ -153,7 +212,6 @@ def is_numeric(value):
 	"""
     return isinstance(value, int) or isinstance(value, float)
 
-	
 def partition(rows, question):
     """
 	Partitions a dataset.
@@ -345,7 +403,7 @@ def iterative_build_tree(rows, maxNodes):
 				else:
 					node.father.false_branch=Leaf(node.rows)
 		
-		print("Number of total node (inner included):"+ str(currentNodes))
+		#print("Number of total node (inner included):"+ str(currentNodes))
 		return root
 
 	
@@ -392,7 +450,7 @@ def print_tree(node, spacing=""):
 
 	# Base case: we've reached a leaf
 	if isinstance(node, Leaf):
-		print (spacing + "Records:")
+		#print (spacing + "Records:")
 		#for row in node.rows:
 			#print (spacing,row)
 		print (spacing + "Predicts", node.predictions)
@@ -408,8 +466,7 @@ def print_tree(node, spacing=""):
 	# Call this function recursively on the false branch
 	print (spacing + '--> False:')
 	print_tree(node.false_branch, spacing + "  ")
-	
-	
+		
 def classify(row, node):
     """See the 'rules of recursion' above."""
 
@@ -426,30 +483,60 @@ def classify(row, node):
         return classify(row, node.false_branch)
 		
 	
-dataset=readDataset()	
-		
-training_data,test_data=divideInHalfTheDataset(dataset.data)
-header=dataset.header
+def getDatasetInfo(dataset):
+	# - - - Informations - - - 
+	print("\n[DATASET INFOS]:\n")
+	print("size of the dataset: "+ str(len(dataset.data)))
+	print("size of the training set (m): "+ str(int(len(dataset.data)/2)))
+	print("number of attributes (d)= "+str(len(dataset.data[0])-1))
+	print("\nNodes(N) <<(2^(d))= "+str(int(	2**(len(dataset.data[0])-1)	))+"\n")
+	number_of_nodes=int(2**(len(dataset.data[0])-2))
+	try:
+		bignumber=int((2*(len(dataset.data[0])-2)*math.e)**number_of_nodes)
+	except:
+		print("possible statistical classificators cardinality is too big to be calculated!")
+		bignumber=np.nan
+	print("possibile statistical classificators <=(2de)^N = "+str(bignumber)+" where N= 2^(d-1)\n")
+	
+	
+if __name__=='__main__':
+	dataset=readDataset()			
+	training_data,test_data=divideInHalfTheDataset(dataset.data)
+	header=dataset.header
+	size_ts=len(training_data)
+	#the teacher says that this is a good number.
+	number_of_classificators=int(10)
+	
+	# - - - Calculations - - -
+	startTime=time.clock()
+	# creates the subsets for the c.v.
+	sets=createThesubsets(training_data,number_of_classificators)
+	#finds the best values of the different values
+	i_star=internal_cross_validation(sets, 3, int(	2**(len(training_data[0]))), 10, size_ts)
+	#creates the tree with the values found by the internal cv
+	tree=iterative_build_tree(training_data,i_star)
+	
+	print("The following is the resulting tree:\n")
+	print_tree(tree)
+	
+	print("\nThe test error with the nodes of the tree chosen by the internal cv ("+str(i_star)+")  is: "+str(lossFunction(test_data,tree)))
+	
+	#creates a tree with N nodes= 2^d
+	tree_2d=iterative_build_tree(training_data,2**(len(test_data[0])-1))
+	print("\nThe test error with the nodes as 2^(d) ("+str(2**(len(test_data[0])-1))+")  is: "+str(lossFunction(test_data,tree_2d)))
+	
+	endTime= time.clock()
+	print("time to calculate: "+str(int(endTime-startTime))+" secs")
+	
+	
+	
+	'''
 
-# The tutorial tree predictor	
-#my_tree = build_tree(training_data)
-#print("old tree: \n")
-#print_tree(my_tree)
-print("Nodes(N)=(2^(d-1)) <<(2^(d)): "+str(int(	2**(len(training_data[0])-1)	)))
-number_of_nodes=int(2**(len(training_data[0])-1))
-print("classificators= (2de)^N : "+str(int(	2**(len(training_data[0])-1)	)))
-number_of_classificators=int((2*len(training_data[0])*math.e)**number_of_nodes)
-sets=createThesubsets(training_data,number_of_classificators)
+	tree=iterative_build_tree(training_data,114)
 
-print("\n\n\ntree calculation:\n")
+	print("the test error with the tree chosen with the internal cv (114) is: "+str(lossFunction(test_data,tree)))
 
-print("len: "+str(len(training_data[0])))
+	tree=iterative_build_tree(training_data,90)
 
-my_new_tree=iterative_build_tree(training_data,number_of_nodes)
-
-print("\nnew tree: \n")
-print_tree(my_new_tree)
-
-print("\n\n\nvaluating the loss:")
-print("loss is: "+str(lossFunction(test_data,my_new_tree)))
-print("\n")
+	print("the test error with the tree 90 nodes: "+str(lossFunction(test_data,tree)))
+	'''
