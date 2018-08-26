@@ -278,7 +278,6 @@ def learnWithCrossVal(sets, header, starting_non, ending_non, different_nv, size
 	#creates the tree with the values found by the internal cv
 
 	tree=DecisionTree(training_set,header,i_star)
-	
 	#print("The following is the resulting tree:\n")
 	#print(tree)
 	
@@ -286,6 +285,51 @@ def learnWithCrossVal(sets, header, starting_non, ending_non, different_nv, size
 	#print("Even if the number chosen is " +str(i_star)+", the real number of nodes in the decision tree is: "+str(tree.nodes))
 	endTime= time.clock()
 	print("\ntime to calculate the CV is: "+str(int(endTime-startTime))+" secs")
+	return tree
+	
+def learnWithTreeRisk(deltaValue, size_ts, training_data,header, numb_of_attr):
+	'''
+		This will use the statistical risk to find the best h.
+		The inputs are:
+			- the delta value e (0,1]
+			- the size of the training set
+			- the number of attributes of this training set
+		It will determine the best number of nodes and return it.
+		This result will be valid with at least probability 1-deltaValue
+		
+		the preference is given with the following function:
+		w(h)= 2^(-|0(h)|) where |0(h)|= (Nh + 1)* ceiling(log2(d + 3))+floor(2log2(Nh) + 1= O(nh*log(d))
+	'''
+	print("\n[learn With tree Risk]")
+	startTime=time.clock()
+	results=list()
+	
+	
+	#loop 10 numbers.
+	nodes_to_test=np.linspace(1, 2**(d+2), 20)
+
+	for i in range(0, len(nodes_to_test)):
+		
+		#create the tree
+		tree=DecisionTree(training_data,header,int(nodes_to_test[i]))
+		#check the training error
+		tr_error= (lossFunction(training_data,tree)/size_ts)
+		#calculating the majorant elements
+		oh=(int(nodes_to_test[i])+1)*math.ceil(math.log2(d+3))+2*math.floor(math.log2(int(nodes_to_test[i])))+1
+		#calculating the value for the comparison
+		value=tr_error + math.sqrt((1/(2*size_ts))*(oh+math.log(2/deltaValue)))
+		print("\nFor the tree with "+str(int(nodes_to_test[i]))+" nodes, the values are the following:\nTraining error: "+str(tr_error)+"; \n|o(h)|: "+str(oh)+";\n value:"+str(value))
+		results.append([value,int(nodes_to_test[i])])
+	
+	results.sort()
+	print()
+	print("The result with probability at least "+ str(1 -deltaValue)+" is: "+str(results[0][1])+". The statistical error er(h) is less than "+str(results[0][0]))
+	endTime= time.clock()
+	#print(results)
+	print("\ntime to calculate the tree risk is: "+str(int(endTime-startTime))+" secs")
+	return results[0][1]
+	
+	
 	
 if __name__=='__main__':
 	dataset=readDataset()			
@@ -306,8 +350,21 @@ if __name__=='__main__':
 	#finds the best values of the different values
 	print("size ts: "+str(size_ts))
 	
-	learnWithCrossVal(sets, header, 3, 2**(d+2), 15, size_ts)
+	algorithm=input("\nWhich algorithm do you want to use?\n '1'=CrossValidation,\n '2'= Risk Analysis,\n '3'= Just show the validation and test error of the algorithm with tree from 1 node to 2^(d+2) nodes.\n:")
 
-	graphicWithDifferentParameters(sets,training_data, size_ts, test_data,header, 3, 2**(d+2), 20)
-
+	if(len(algorithm)>0 and not algorithm==''):
+		algorithm=int(algorithm) 
 	
+	if(algorithm==1):
+		tree=learnWithCrossVal(sets, header, 3, 2**(d+2), 15, size_ts)
+		print(tree)
+		print("test error: "+ str(lossFunction(test_data,tree)/len(test_data)))
+		print()
+	if(algorithm==2):
+		treeRiskh=learnWithTreeRisk(0.001, size_ts, training_data,header, d)
+		tree=DecisionTree(training_data,header,treeRiskh)
+		print(tree)
+		print("test error: "+ str(lossFunction(test_data,tree)/len(test_data)))
+	if(algorithm==3):
+		graphicWithDifferentParameters(sets,training_data, size_ts, test_data,header, 3, 2**(d+2), 20)
+		print()
