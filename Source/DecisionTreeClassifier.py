@@ -287,7 +287,7 @@ def learnWithCrossVal(sets, header, starting_non, ending_non, different_nv, size
 	print("\ntime to calculate the CV is: "+str(int(endTime-startTime))+" secs")
 	return tree
 	
-def learnWithTreeRisk(deltaValue, size_ts, training_data,header, numb_of_attr):
+def learnWithTreeRisk(deltaValue, size_ts, training_data,header, numb_of_attr, isOn):
 	'''
 		This will use the statistical risk to find the best h.
 		The inputs are:
@@ -314,8 +314,13 @@ def learnWithTreeRisk(deltaValue, size_ts, training_data,header, numb_of_attr):
 		tree=DecisionTree(training_data,header,int(nodes_to_test[i]))
 		#check the training error
 		tr_error= (lossFunction(training_data,tree)/size_ts)
+		
 		#calculating the majorant elements
-		oh=(int(nodes_to_test[i])+1)*math.ceil(math.log2(d+3))+2*math.floor(math.log2(int(nodes_to_test[i])))+1
+		if(isOn):
+			oh=(int(nodes_to_test[i])+1)			 #this is O(n)
+		else:
+			oh=(int(nodes_to_test[i])+1)*math.ceil(math.log2(d+3))+2*math.floor(math.log2(int(nodes_to_test[i])))+1		#this is O(n*log(d))
+		
 		#calculating the value for the comparison
 		value=tr_error + math.sqrt((1/(2*size_ts))*(oh+math.log(2/deltaValue)))
 		print("\nFor the tree with "+str(int(nodes_to_test[i]))+" nodes, the values are the following:\nTraining error: "+str(tr_error)+"; \n|o(h)|: "+str(oh)+";\n value:"+str(value))
@@ -361,7 +366,13 @@ if __name__=='__main__':
 		print("test error: "+ str(lossFunction(test_data,tree)/len(test_data)))
 		print()
 	if(algorithm==2):
-		treeRiskh=learnWithTreeRisk(0.001, size_ts, training_data,header, d)
+		deltaValue=float(input("Choose the value of the delta (range=(0,1]): "))
+		isOn=int(input("As |o(h)| do you want to use a O(n) estimation or a O(n*log(d)) estimation? Press '0' for O(n), '1' for O(n*log(d)): "))
+		if(isOn==0):
+			isOn=True
+		else:
+			isOn=False
+		treeRiskh=learnWithTreeRisk(deltaValue, size_ts, training_data,header, d,isOn)
 		tree=DecisionTree(training_data,header,treeRiskh)
 		print(tree)
 		print("test error: "+ str(lossFunction(test_data,tree)/len(test_data)))
