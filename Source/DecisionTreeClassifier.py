@@ -189,25 +189,7 @@ def internal_cross_validation(sets,starting_num_of_nodes, ending_num_of_nodes, d
 		currentValues+=1
 	
 	print ("[INTERNAL CV] To find the chosen element, it took "+str(currentValues)+" steps.")
-	return interval[1][1]
-	
-	'''
-	nodes_to_test=np.linspace(starting_num_of_nodes, ending_num_of_nodes, different_nodes_values)
-	
-	index_error_list=list()
-	
-	for i in range(0, len(nodes_to_test)):
-		index_error_list.append([int(nodes_to_test[i]),external_cross_validation(sets,int(nodes_to_test[i]),size_ts)])
-	
-	# all the errors are calculated. we need to find the argmin
-	min_index=0
-	for i in range(0,len(index_error_list)):
-		if(index_error_list[min_index][1]>index_error_list[i][1]):
-			min_index=i
-	
-	print("[INTERNAL CV result] The number of nodes should be: "+str(index_error_list[min_index][0]))
-	return index_error_list[min_index][0]	
-	'''
+	return index_error_list[interval[1][0]][1],interval[1][1]
 	
 def getDatasetInfo(dataset, training_data):
 	# - - - Informations - - - 
@@ -215,7 +197,7 @@ def getDatasetInfo(dataset, training_data):
 	print("size of the dataset: "+ str(len(dataset.data)))
 	print("size of the training set (m): "+ str(int(len(training_data))))
 	print("number of attributes (d)= "+str(len(dataset.data[0])-1))
-	print("\nNodes(N) <<(3^(d))= "+str(int(	3**(len(dataset.data[0])-1)	))+"\n")
+	print("\nNodes(N) <<(2^(d))= "+str(int(	2**(len(dataset.data[0])-1)	))+"\n")
 	number_of_nodes=int(2**(len(dataset.data[0])-2))
 	try:
 		bignumber=int((2*(len(dataset.data[0])-2)*math.e)**number_of_nodes)
@@ -264,36 +246,73 @@ def graphicWithDifferentParameters(training_subsets,training_set,size_ts,test_se
 	plt.legend(loc='best')
 	plt.show()
 
-	
 def learnWithCrossVal(sets, header, starting_non, ending_non, different_nv, size_ts):
 	'''
-	This method is used to learn the best number of nodes in the interval choosing within 10 elements in this interval.
+	This method is used to learn the best tree parameter using different_nv steps.
+	Given Argument:
+		- sets = the sets used for the cross validation (sets are already separated, so this is a list of sets)
+		- header = the header of the dataset
+		- starting_non = the starting number of nodes (usually 3 or 1)
+		- ending_non = the last element number of node to check in the interval
+		- different_nv = how many steps this method is allowed to iterate
+		- size_ts= the size of the overall training set
+	Returns:
+		- the tree that minimizes the cross validation error
 	'''
 	print("\n[learn With CV]")
 	startTime=time.clock()
 	training_set=sets[0]
 	for i in range(1,len(sets)):
 		training_set+=sets[i]
-	i_star=internal_cross_validation(sets, starting_non, ending_non, different_nv, size_ts)
+	accuracy,i_star=internal_cross_validation(sets, starting_non, ending_non, different_nv, size_ts)
 	#creates the tree with the values found by the internal cv
 
 	tree=DecisionTree(training_set,header,i_star)
 	#print("The following is the resulting tree:\n")
 	#print(tree)
-	
-	print("\nThe test error  with the nodes of the tree chosen by the internal cv ("+str(i_star)+")  is: "+str(lossFunction(test_data,tree))+ "\n(this is the number of errors that this predictor does on the test set)")
+	print("\nThe erCVi* is: "+str(accuracy))
+	print("The test error  with the nodes of the tree chosen by the internal cv ("+str(i_star)+")  is: "+str(lossFunction(test_data,tree))+ "\n(this is the number of errors that this predictor does on the test set)")
 	#print("Even if the number chosen is " +str(i_star)+", the real number of nodes in the decision tree is: "+str(tree.nodes))
 	endTime= time.clock()
 	print("\ntime to calculate the CV is: "+str(int(endTime-startTime))+" secs")
 	return tree
+
+
+def riskAnalysisValue(n_o_n, training_data,size_ts,header,isOn, deltaValue):
+		'''
+		This method will do the calculation for risk analysis approach:
+		Given argument:
+			- n_o_n= number of nodes
+			- training_data = the training set
+			- header= the header of the training set
+			- isOn= boolean to say if should be used a isOn fuction or a Onlogn
+		Return:
+			The value of the estimation
+		'''
+		tree=DecisionTree(training_data,header,n_o_n)
+		#check the training error
+		tr_error= (lossFunction(training_data,tree)/size_ts)
+		
+		#calculating the majorant elements
+		if(isOn):
+			oh=(n_o_n+1)			 #this is O(n)
+		else:
+			oh=(n_o_n+1)*math.ceil(math.log2(d+3))+2*math.floor(math.log2(n_o_n))+1		#this is O(n*log(d))
+		
+		#calculating the value for the comparison
+		value=tr_error + math.sqrt((1/(2*size_ts))*(oh+math.log(2/deltaValue)))
+		
+		return value
+
 	
-def learnWithTreeRisk(deltaValue, size_ts, training_data,header, numb_of_attr, isOn):
+def learnWithTreeRisk(deltaValue, size_ts, training_data,header, numb_of_attr, isOn, different_nodes_values):
 	'''
 		This will use the statistical risk to find the best h.
 		The inputs are:
 			- the delta value e (0,1]
 			- the size of the training set
 			- the number of attributes of this training set
+			- how many steps is allowed to take to converge
 		It will determine the best number of nodes and return it.
 		This result will be valid with at least probability 1-deltaValue
 		
@@ -304,37 +323,59 @@ def learnWithTreeRisk(deltaValue, size_ts, training_data,header, numb_of_attr, i
 	startTime=time.clock()
 	results=list()
 	
+	# this interval is fixed. We should consider just 2^d, but because the attributes are not binary i prefer to not me ^d but d+1 or +2
+	interval= [[0,3], [1,2**(numb_of_attr+2)]]
 	
-	#loop 10 numbers.
-	nodes_to_test=np.linspace(1, 2**(d+2), 20)
-
-	for i in range(0, len(nodes_to_test)):
+	results=list()
+	#the 2 limits, the starting and the ending
+	results.append([3,riskAnalysisValue(1, training_data,size_ts,header,isOn, deltaValue)])
+	results.append([2**(numb_of_attr+2),riskAnalysisValue(2**(numb_of_attr+2), training_data,size_ts,header,isOn, deltaValue)])
+	
+	currentValues=2
+	
+	meanNodeTimes=[3,0]
+	while(different_nodes_values>currentValues):
+		meanNode=int((interval[0][1]+interval[1][1])/2)
+		meanNError=riskAnalysisValue(meanNode, training_data,size_ts,header,isOn, deltaValue)
 		
-		#create the tree
-		tree=DecisionTree(training_data,header,int(nodes_to_test[i]))
-		#check the training error
-		tr_error= (lossFunction(training_data,tree)/size_ts)
+		#checking the error with the left border of the interval
+		if(meanNError<results[interval[0][0]][1]):
+			results.insert(interval[0][0]+1, [meanNode,meanNError] )
+			interval[0]=[interval[0][0]+1,meanNode]
+			interval[1][0]=interval[1][0]+1
 		
-		#calculating the majorant elements
-		if(isOn):
-			oh=(int(nodes_to_test[i])+1)			 #this is O(n)
+		#checking the error with the right border of the interval
+		if(meanNError<=results[interval[1][0]][1]):
+			results.insert(interval[1][0], [meanNode,meanNError] )
+			interval[1][1]=meanNode
+		#checking if the left and the right borders have the same value
+		if(interval[0][1]==interval[1][1]):
+			if (different_nodes_values>currentValues):
+				interval[0][0]=interval[0][0]-1
+				interval[0][1]=results[interval[0][0]][0]
+		if(not meanNode==meanNodeTimes[0]):
+			meanNodeTimes=[meanNode,0]
 		else:
-			oh=(int(nodes_to_test[i])+1)*math.ceil(math.log2(d+3))+2*math.floor(math.log2(int(nodes_to_test[i])))+1		#this is O(n*log(d))
+			meanNodeTimes[1]+=1
+			if(meanNodeTimes[1]==1):
+				break
+		currentValues+=1
+		print("\nStep "+str(currentValues))
+		for row in interval:
+			print(row)
+			print("results:"+str(results[row[0]][1]))
 		
-		#calculating the value for the comparison
-		value=tr_error + math.sqrt((1/(2*size_ts))*(oh+math.log(2/deltaValue)))
-		print("\nFor the tree with "+str(int(nodes_to_test[i]))+" nodes, the values are the following:\nTraining error: "+str(tr_error)+"; \n|o(h)|: "+str(oh)+";\n value:"+str(value))
-		results.append([value,int(nodes_to_test[i])])
-	
-	results.sort()
 	print()
-	print("The result with probability at least "+ str(1 -deltaValue)+" is: "+str(results[0][1])+". The statistical error er(h) is less than "+str(results[0][0]))
+	print("The result with probability at least "+ str(1 -deltaValue)+" is: "+str(results[interval[1][0] ] [0])+". The statistical error er(h) is less than "+str(results[interval[1][0] ] [1] ))
 	endTime= time.clock()
-	#print(results)
+	
+	# Just debugging
+	for row in results:
+		print(row)
+		
 	print("\ntime to calculate the tree risk is: "+str(int(endTime-startTime))+" secs")
-	return results[0][1]
-	
-	
+	return results[interval[1][0] ][0]
+
 	
 if __name__=='__main__':
 	dataset=readDataset()			
@@ -372,7 +413,7 @@ if __name__=='__main__':
 			isOn=True
 		else:
 			isOn=False
-		treeRiskh=learnWithTreeRisk(deltaValue, size_ts, training_data,header, d,isOn)
+		treeRiskh=learnWithTreeRisk(deltaValue, size_ts, training_data,header, d,isOn,15)
 		tree=DecisionTree(training_data,header,treeRiskh)
 		print(tree)
 		print("test error: "+ str(lossFunction(test_data,tree)/len(test_data)))
