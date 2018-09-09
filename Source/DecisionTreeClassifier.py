@@ -10,6 +10,7 @@ import matplotlib.pyplot as plt
 import time
 from pathlib import Path
 import os.path
+import argparse
 
 # ------ New Functions ----
 
@@ -366,18 +367,27 @@ def learnWithTreeRisk(deltaValue, size_ts, training_data,header, numb_of_attr, i
 			print("results:"+str(results[row[0]][1]))
 		
 	print()
-	print("The result with probability at least "+ str(1 -deltaValue)+" is: "+str(results[interval[1][0] ] [0])+". The statistical error er(h) is less than "+str(results[interval[1][0] ] [1] ))
+	print("The result with probability at least "+ str(1 -deltaValue)+" is: "+str(results[interval[1][0] ] [0])+".")
+	print("The statistical error er(h) is less than "+str(results[interval[1][0] ] [1] ))
 	endTime= time.clock()
 	
 	# Just debugging
-	for row in results:
-		print(row)
+	#for row in results:
+	#	print(row)
 		
 	print("\ntime to calculate the tree risk is: "+str(int(endTime-startTime))+" secs")
 	return results[interval[1][0] ][0]
 
 	
 if __name__=='__main__':
+
+	ap = argparse.ArgumentParser(description="Additial feature, like debug and show of the tree")
+
+	ap.add_argument("-d", "--debug", help="add this if you want to see the debug infos like info about the dataset or the tree",action= 'store_true')
+	args = vars(ap.parse_args())
+
+	debug=args["debug"]
+
 	dataset=readDataset()			
 	training_data,test_data=divideTheDataset(dataset.data)
 	header=dataset.header
@@ -385,8 +395,8 @@ if __name__=='__main__':
 	#the teacher says that this is a good number.
 	number_of_classificators=int(10)
 	d= len(training_data[0])-1
-	
-	getDatasetInfo(dataset,training_data)
+	if(debug):
+		getDatasetInfo(dataset,training_data)
 	
 	# - - - Calculations - - -
 	print("[CALCULATION]\n")
@@ -403,9 +413,11 @@ if __name__=='__main__':
 	
 	if(algorithm==1):
 		tree=learnWithCrossVal(sets, header, 3, 2**(d+2), 15, size_ts)
-		print(tree)
+		if(debug):
+			print(tree)
 		print("test error: "+ str(lossFunction(test_data,tree)/len(test_data)))
 		print()
+		
 	if(algorithm==2):
 		deltaValue=float(input("Choose the value of the delta (range=(0,1]): "))
 		isOn=int(input("As |o(h)| do you want to use a O(n) estimation or a O(n*log(d)) estimation? Press '0' for O(n), '1' for O(n*log(d)): "))
@@ -415,8 +427,11 @@ if __name__=='__main__':
 			isOn=False
 		treeRiskh=learnWithTreeRisk(deltaValue, size_ts, training_data,header, d,isOn,15)
 		tree=DecisionTree(training_data,header,treeRiskh)
-		print(tree)
+		if(debug):
+			print(tree)
 		print("test error: "+ str(lossFunction(test_data,tree)/len(test_data)))
+		
 	if(algorithm==3):
 		graphicWithDifferentParameters(sets,training_data, size_ts, test_data,header, 3, 2**(d+2), 20)
 		print()
+	print()

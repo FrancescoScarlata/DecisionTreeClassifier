@@ -21,6 +21,7 @@ These are the modules used in this project:
 - time
 - os.path
 - matplotlib
+- argparse
 
 ## Dataset setup
 
@@ -30,7 +31,7 @@ These are the modules used in this project:
 
 ## How to use the scripts
 (These instructions are for windows)
-1. Go in the Source folder and use  '''python DecisionTreeClassifier.py'''
+1. Go in the Source folder and use  '''python DecisionTreeClassifier.py'''. If you want to see the resulting tree, use -d at the end: '''python DecisionTreeClassifier.py -d'''
 2. Write the relative Path inside the "Datasets" folder for the dataset data. For example, to use the dataset 'car_data.csv' inside the 'CarEvaluation' folder, we'll write "CarEvaluation\car_data.csv".
 3. Write the relative Path inside the "Datasets" folder for the header of the dataset. For example, to use the header 'car_header.csv' inside the 'CarEvaluation' folder, we'll write "CarEvaluation\header_data.csv".
 4. Write the number of the indixes that have a numeric value. This is to distinguish the cases '<=' to '=='. In case there are no numeric columns, just use the 'Enter' key.
