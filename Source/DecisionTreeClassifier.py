@@ -129,8 +129,7 @@ def external_cross_validation(sets, number_of_nodes, size_ts):
 	print ("\n[External CV]\nThe Mean error is: "+ str(error)+" with the number of nodes: "+ str(number_of_nodes)+ " (real number of Nodes: "+str(tree.nodes)+")")
 	return error
 	
-# --- Old Functions (except the iterative tree building) ---	
-
+	
 def internal_cross_validation(sets,starting_num_of_nodes, ending_num_of_nodes, different_nodes_values, size_ts):
 	'''
 		This method will search the best value of the number of nodes between the starting number of nodes and the ending number of nodes.
